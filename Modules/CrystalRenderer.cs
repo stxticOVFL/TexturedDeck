@@ -1,0 +1,182 @@
+﻿using MelonLoader;
+using NeonLite;
+using NeonLite.Modules;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using UnityEngine;
+
+namespace TexturedDeck.Modules
+{
+    internal class CrystalRenderer : MonoBehaviour, IModule
+    {
+        internal static CrystalRenderer i;
+        static RenderTexture camTex;
+        static RenderTexture cardBuffer;
+
+        internal static MelonPreferences_Entry<bool> colorful;
+        internal static MelonPreferences_Entry<float> saturate;
+        internal static MelonPreferences_Entry<float> brighten;
+
+        Camera cam;
+        GameObject fog;
+        Material fogMat;
+        GameObject icon;
+        Material iconMat;
+        static Material transMat;
+        static Material baseMat;
+        static Material alphaMat;
+        Transform cardHolder;
+        UICard card;
+
+        internal static void SetupRenderer() {
+
+            baseMat = Instantiate(TexturedDeck.bundle.LoadAsset<Material>("Assets/Shader/Basic.mat"));
+            alphaMat = Instantiate(TexturedDeck.bundle.LoadAsset<Material>("Assets/Shader/SetAlpha.mat"));
+            transMat = Instantiate(TexturedDeck.bundle.LoadAsset<Material>("Assets/Shader/Transpose.mat"));
+            var obj = Instantiate(TexturedDeck.bundle.LoadAsset<GameObject>("Assets/CrystalRenderer.prefab"));
+            DontDestroyOnLoad(obj);
+            obj.AddComponent<CrystalRenderer>();
+        }
+
+        void Awake()
+        {
+            i = this;
+            fog = transform.Find("Fog").gameObject;
+            fogMat = fog.transform.GetComponent<MeshRenderer>().material;
+            icon = transform.Find("Icon").gameObject;
+            iconMat = icon.transform.GetComponent<MeshRenderer>().material;
+            cam = GetComponentInChildren<Camera>();
+            camTex = cam.targetTexture;
+
+            cardBuffer = new(camTex);
+            transMat.SetTexture("_CardBuffer", cardBuffer);
+
+            cardHolder = transform.Find("Card Holder");
+            card = Utils.CreateObjectFromResources("UICard", "UICard", cardHolder).GetComponent<UICard>();
+            card.transform.localPosition = new Vector2(0, 0);
+            card.transform.localRotation = Quaternion.identity;
+            card.transform.localScale = new Vector2(1, 1);
+            card.SetTargetTransform(card.transform);
+            card.ResetAesthetics();
+            card.UICards[0].gameObject.SetActive(true);
+            card.UICards[0].SetFakeAA(false);
+            Helpers.Method(typeof(UICard), "ForceSpringTargets").Invoke(card, []);
+
+            gameObject.SetActive(false);
+        }
+
+        public static void Active(bool active) => i.gameObject.SetActive(active);
+
+        static readonly int _Alpha = Shader.PropertyToID("_Alpha");
+
+        static readonly Vector3 backingPos = new(0, -0.0339f, 1);
+        static readonly Vector3 cardPos = new(0.004f, -0.0167f, 1);
+
+        public static bool GetTexture(Manager.CrystalOverride crystal)
+        {
+            if (!i)
+                return false;
+            var active = RenderTexture.active;
+
+            bool ret;
+            if (crystal.card.data.cardType == PlayerCardData.Type.SpecialConsumableAutomatic || colorful.Value)
+            {
+                i.cardHolder.gameObject.SetActive(false);
+                i.icon.gameObject.SetActive(true);
+                i.fog.gameObject.SetActive(true);
+                Color.RGBToHSV(crystal.card.data.cardColor, out var h, out var s, out var v);
+                // shift based on health
+                //h += .02f;
+                s *= ((78.2f + saturate.Value) / 52.9f);
+                v *= ((61.2f + brighten.Value) / 93.3f);
+                i.fogMat.color = Color.HSVToRGB(h, s, v);
+                i.iconMat.mainTexture = Manager.GetOverride(crystal.card.data.cardDesignTexture);
+                i.cam.targetTexture = camTex;
+                i.cam.Render();
+                alphaMat.SetFloat(_Alpha, 0);
+                Graphics.Blit(camTex, crystal.newTex as RenderTexture, alphaMat);
+
+                ret = true;
+            }
+            else
+            {
+                i.cardHolder.gameObject.SetActive(true);
+                i.icon.gameObject.SetActive(false);
+                i.fog.gameObject.SetActive(true);
+                // position the backing and fog
+                i.fogMat.color = Color.black;
+                i.card.SetCard(crystal.card);
+                i.cardHolder.transform.localPosition = backingPos;
+                i.card.cardBG.SetActive(true);
+                i.card.cardBG.transform.SetParent(i.cardHolder.transform, true);
+                i.card.UICards[0].gameObject.SetActive(false);
+                i.card.UICards[0].textDiscardAbility_Localized.gameObject.SetActive(false);
+                // render the backing and fog
+                i.cam.targetTexture = camTex;
+                i.cam.Render();
+                // setup just the card
+                i.fog.gameObject.SetActive(false);
+                i.card.cardBG.SetActive(false);
+                i.cardHolder.transform.localPosition = cardPos;
+                i.card.UICards[0].gameObject.SetActive(true);
+                i.card.UICards[0].textDiscardAbility_Localized.gameObject.SetActive(true);
+                // render the card
+                i.cam.targetTexture = cardBuffer;
+                i.cam.Render();
+
+                Graphics.Blit(camTex, crystal.newTex as RenderTexture, transMat);
+                ret = true;
+            }
+
+            RenderTexture.active = active;
+            return ret;
+        }
+
+        // patches
+        const bool priority = true;
+        static bool active = true;
+
+        internal static void Setup() {
+            var setting = Settings.Add(TexturedDeck.h, "", "crystalChange", "Enable Crystal Changes", null, true, true);
+            active = setting.SetupForModule(Activate, (_, after) => after);
+
+            colorful = Settings.Add(TexturedDeck.h, "", "colorCrystal", "Colorful Crystals", "Whether or not to generate crystals the same way as the health and ammo cards are displayed.", true);
+            brighten = Settings.Add(TexturedDeck.h, "", "colorValue", "Crystal Value", "Brighten the crystals generatd by the Colorful Crystals style.", 0f, new MelonLoader.Preferences.ValueRange<float>(0, 100));
+            saturate = Settings.Add(TexturedDeck.h, "", "colorSat", "Crystal Saturation", "Saturate the crystals generatd by the Colorful Crystals style.", 0f, new MelonLoader.Preferences.ValueRange<float>(0, 100));
+
+            colorful.OnEntryValueChanged.Subscribe((_, _) => SetDirty());
+            brighten.OnEntryValueChanged.Subscribe((_, _) => SetDirty());
+            saturate.OnEntryValueChanged.Subscribe((_, _) => SetDirty());
+        }
+
+        static void Activate(bool activate)
+        {
+            Patching.TogglePatch(activate, typeof(BreakableCrystal), "SetMaterialTexture", SetMaterialOverride, Patching.PatchTarget.Prefix);
+            active = activate;
+        }
+
+        static void SetDirty()
+        {
+            foreach (var kv in Manager.overrides)
+            {
+                if (kv.Value is Manager.CrystalOverride c)
+                    c.SetDirty();
+            }
+        }
+
+        static readonly int _crystalTexID = Shader.PropertyToID("_HeightMap");
+        static bool SetMaterialOverride(BreakableCrystal __instance, Texture2D tex)
+        {
+            if (tex == null || !Manager.overrides.TryGetValue(tex, out var overrides))
+                return true;
+
+            foreach (var render in __instance._crystalRenderers)
+                render.material.SetTexture(_crystalTexID, overrides.newTex as RenderTexture);
+
+            return false;
+        }
+    }
+}
