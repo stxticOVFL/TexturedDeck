@@ -29,7 +29,7 @@ namespace TexturedDeck.Modules
         static void Setup()
         {
             var setting = Settings.Add(TexturedDeck.h, "", "uiCard", "Enable UICard Changes", null, true, true);
-            showAmmo = Settings.Add(TexturedDeck.h, "", "showAmmo", "Show Ammo", null, false);
+            showAmmo = Settings.Add(TexturedDeck.h, "", "showAmmo", "Show Ammo", "Whether or not to display the ammo in the few dropped cards with overriden ammo values.", false);
             active = setting.SetupForModule(Activate, (_, after) => after);
         }
 
