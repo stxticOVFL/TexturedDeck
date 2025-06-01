@@ -132,8 +132,10 @@ namespace TexturedDeck
                 };
                 rTex.Create();
                 newTex = rTex;
-                this.card = new();
-                this.card.data = card;
+                this.card = new()
+                {
+                    data = card
+                };
                 this.card.Initialize();
 
 #if DEBUG
@@ -171,8 +173,32 @@ namespace TexturedDeck
             return ovride.newTex as Texture2D;
         }
 
+        static readonly Dictionary<string, string> readableToID = new() {
+            { "Katana",         "KATANA" },
+            { "Fists",          "FISTS" },
+            { "Miracle Katana", "KATANA_MIRACLE" },
+            { "Purify",         "MACHINEGUN" },
+            { "Elevate",        "PISTOL" },
+            { "Godspeed",       "RIFLE" },
+            { "Stomp",          "UZI" },
+            { "Fireball",       "SHOTGUN" },
+            { "Dominion",       "ROCKETLAUNCHER" },
+            { "Book of Life",   "RAPTURE" },
+            { "Health",         "HEALTH" },
+            { "Ammo",           "AMMO"}
+        };
+
+        static Dictionary<string, string> idToReadable = null;
+
         static void Activate(bool export)
         {
+            if (idToReadable == null)
+            {
+                idToReadable = [];
+                foreach (var kv in readableToID)
+                    idToReadable.Add(kv.Value, kv.Key);
+            }
+
             var icon = Path.Combine(PackPath, "Designs");
             var detail = Path.Combine(PackPath, "Details");
             var gd = TexturedDeck.Game.GetGameData();
@@ -188,23 +214,23 @@ namespace TexturedDeck
                 Directory.CreateDirectory(icon);
                 Directory.CreateDirectory(detail);
 
-                string[] ids = ["KATANA", "FISTS", "KATANA_MIRACLE",
-                                "MACHINEGUN", "PISTOL", "RIFLE", "UZI", "SHOTGUN", "ROCKETLAUNCHER", "RAPTURE",
-                                "HEALTH", "AMMO"];
-                cards = ids.Select(gd.GetCard);
+                cards = readableToID.Select(kv => gd.GetCard(kv.Value));
             }
             else
             {
                 var files = Directory.GetFiles(icon, "*.png", SearchOption.TopDirectoryOnly);
-                cards = files.Select(x => gd.GetCard(Path.GetFileNameWithoutExtension(x))).Where(x => x != null);
+                cards = files
+                    .Select(Path.GetFileNameWithoutExtension)
+                    .Select(x => gd.GetCard(
+                        readableToID.TryGetValue(x, out var v) ? v : x))
+                    .Where(x => x != null);
             }
-
 
             HashSet<TextureOverride> baseCrystals = [];
             HashSet<TextureOverride> allCrystals = [];
 
             string pathbuf;
-            
+
             foreach (var card in cards)
             {
                 TextureOverride crystalOverride = null;
@@ -237,7 +263,11 @@ namespace TexturedDeck
                     texOverride.SetDirty();
                 }
 
-                pathbuf = Path.Combine(icon, $"{card.cardID}.png");
+                var old = Path.Combine(icon, $"{card.cardID}.png");
+                pathbuf = Path.Combine(icon, $"{idToReadable[card.cardID]}.png");
+
+                if (File.Exists(old))
+                    File.Move(old, pathbuf);
                 MakeOverride(card.cardDesignTexture, true);
 
                 if (card.cardBGTextureOverride)
@@ -306,13 +336,13 @@ namespace TexturedDeck
         {
             if (!ready)
                 return;
-            CrystalRenderer.Active(true);
+            CrystalRenderer.SetActive(true);
             foreach (var kv in overrides)
             {
                 if (kv.Value.CheckDirty())
                     kv.Value.FetchTexture();
             }
-            CrystalRenderer.Active(false);
+            CrystalRenderer.SetActive(false);
         }
 
         static readonly FieldInfo[] overrideFields = [

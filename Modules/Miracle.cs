@@ -1,4 +1,5 @@
-﻿using NeonLite;
+﻿using MelonLoader;
+using NeonLite;
 using NeonLite.Modules;
 using System;
 using System.Collections.Generic;
@@ -16,6 +17,13 @@ namespace TexturedDeck.Modules
         const bool active = true;
 
         static readonly Dictionary<MiracleButton, UICard> cards = [];
+
+        internal static MelonPreferences_Entry<bool> showText;
+
+        static void Setup()
+        {
+            showText = Settings.Add(TexturedDeck.h, "", "miracleText", "Show Miracle Text", "Whether or not to display the card text in the Miracle menu.", true);
+        }
 
         static void Activate(bool _)
         {
@@ -50,6 +58,7 @@ namespace TexturedDeck.Modules
             }
             else
                 card.SetCard(card.GetCurrentPlayerCard());
+            card.UICards[0].textDiscardAbility_Localized.gameObject.SetActive(showText.Value);
             __instance.GetComponent<MiracleHelper>().SetAlpha(0);
         }
 
