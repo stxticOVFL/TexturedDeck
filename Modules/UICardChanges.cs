@@ -53,10 +53,13 @@ namespace TexturedDeck.Modules
                 __state = true;
             useBakedGraphic = false;
 
-            if (!card.data.cardBGTextureOverride)
-                __instance.CardMat.SetTexture(UICard._IDTexture, Manager.GetOverride(defaultBG));
-            if (!card.data.cardColorMaskTextureOverride)
-                __instance.CardMat.SetTexture(UICard._IDColorMask, Manager.GetOverride(defaultMask));
+            if (!Manager.src.Value)
+            {
+                if (!card.data.cardBGTextureOverride)
+                    __instance.CardMat.SetTexture(UICard._IDTexture, Manager.GetOverride(defaultBG));
+                if (!card.data.cardColorMaskTextureOverride)
+                    __instance.CardMat.SetTexture(UICard._IDColorMask, Manager.GetOverride(defaultMask));
+            }
             __instance.CardMat.SetTexture(_RipNoise, Manager.GetOverride(defaultRip));
         }
         static void FakeBaked(UICardAesthetics __instance, bool __state)

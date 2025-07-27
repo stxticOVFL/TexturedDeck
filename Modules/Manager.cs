@@ -21,6 +21,7 @@ namespace TexturedDeck
         const bool active = true;
 
         static MelonPreferences_Entry<string> category;
+        internal static MelonPreferences_Entry<bool> src;
 
         internal static bool ready;
 
@@ -28,6 +29,10 @@ namespace TexturedDeck
         {
             category = Settings.Add(TexturedDeck.h, "", "category", "Pack", "The selected pack to use.\nSelecting a pack that doesn't exist will create it with most textures you want.", "Default");
             category.SetupForModule(Activate, (_, _) => !Directory.Exists(PackPath));
+
+            src = Settings.Add(TexturedDeck.h, "", "srcVerify", "SRC Verifiable", "If enabled, disables setting the BG and the mask for the card.", true);
+            src.SetupForModule(Activate, (_, _) => !Directory.Exists(PackPath));
+
 
             //CrystalRenderer.SetupS(); // make sure these are after pack
         }
@@ -170,9 +175,17 @@ namespace TexturedDeck
                 return null;
             if (!overrides.TryGetValue(texture, out var ovride))
                 return texture;
+            if (ovride.newTex == null)
+                return texture;
             return ovride.newTex as Texture2D;
         }
 
+        internal static Texture2D GetOverrideSRC(Texture2D texture)
+        {
+            if (src.Value)
+                return texture;
+            return GetOverride(texture);
+        }
         static readonly Dictionary<string, string> readableToID = new() {
             { "Katana",         "KATANA" },
             { "Fists",          "FISTS" },
@@ -270,23 +283,29 @@ namespace TexturedDeck
                     File.Move(old, pathbuf);
                 MakeOverride(card.cardDesignTexture, true);
 
-                if (card.cardBGTextureOverride)
-                    MakeOverride(card.cardBGTextureOverride);
-                else if (card.crystalTexture)
-                    baseCrystals.Add(crystalOverride);
+                if (!src.Value)
+                {
+                    if (card.cardBGTextureOverride)
+                        MakeOverride(card.cardBGTextureOverride);
+                    else if (card.crystalTexture)
+                        baseCrystals.Add(crystalOverride);
 
-                if (card.cardColorMaskTextureOverride)
-                    MakeOverride(card.cardColorMaskTextureOverride);
-                else if (card.crystalTexture)
-                    baseCrystals.Add(crystalOverride);
+                    if (card.cardColorMaskTextureOverride)
+                        MakeOverride(card.cardColorMaskTextureOverride);
+                    else if (card.crystalTexture)
+                        baseCrystals.Add(crystalOverride);
+                }
             }
 
             // default time
             var uiCard = Utils.CreateObjectFromResources("UICard", "UICard").GetComponent<UICard>();
             var uiCardA = uiCard.UICards[0];
 
-            void AddDefault(Texture2D tex, string name, IEnumerable<TextureOverride> children)
+            void AddDefault(Texture2D tex, string name, IEnumerable<TextureOverride> children, bool checkSrc = false)
             {
+                if (checkSrc && src.Value)
+                    return;
+
                 pathbuf = Path.Combine(detail, $"{name}.png");
                 if (!File.Exists(pathbuf))
                     TexturedDeck.SaveAsPNG(tex, pathbuf);
@@ -304,11 +323,11 @@ namespace TexturedDeck
             }
 
             var defaultBg = uiCardA.CardMat.GetTexture(UICard._IDTexture) as Texture2D;
-            AddDefault(defaultBg, "Default BG", baseCrystals);
+            AddDefault(defaultBg, "Default BG", baseCrystals, true);
             UICardChanges.defaultBG = defaultBg;
 
             var defaultMask = uiCardA.CardMat.GetTexture(UICard._IDColorMask) as Texture2D;
-            AddDefault(defaultMask, "Default Mask", baseCrystals);
+            AddDefault(defaultMask, "Default Mask", baseCrystals, true);
             UICardChanges.defaultMask = defaultMask;
 
             var defaultRip = uiCardA.CardMat.GetTexture(UICardChanges._RipNoise) as Texture2D;
@@ -352,14 +371,21 @@ namespace TexturedDeck
             Helpers.Field(typeof(PlayerCardData), "crystalTexture")
         ];
 
+        static readonly FieldInfo[] overrideSRC = [
+            Helpers.Field(typeof(PlayerCardData), "cardBGTextureOverride"),
+            Helpers.Field(typeof(PlayerCardData), "cardColorMaskTextureOverride"),
+        ];
+
         internal static IEnumerable<CodeInstruction> AddOverrides(IEnumerable<CodeInstruction> instructions)
         {
             return new CodeMatcher(instructions)
                 .MatchForward(true, new CodeMatch(x => overrideFields.Any(f => x.LoadsField(f))))
                 .Repeat(m =>
                 {
+                    var f = (FieldInfo)m.Instruction.operand;
+                    var src = overrideSRC.Contains(f);
                     m.Advance(1)
-                    .InsertAndAdvance(CodeInstruction.Call(typeof(Manager), "GetOverride"));
+                    .InsertAndAdvance(CodeInstruction.Call(typeof(Manager), src ? "GetOverrideSRC" : "GetOverride"));
                 })
                 .InstructionEnumeration();
         }
