@@ -62,12 +62,12 @@ namespace TexturedDeck.Modules
             }
             __instance.CardMat.SetTexture(_RipNoise, Manager.GetOverride(defaultRip));
         }
-        static void FakeBaked(UICardAesthetics __instance, bool __state)
+        static void FakeBaked(UICardAesthetics __instance, PlayerCard card, bool __state)
         {
             if (__state)
             {
-                var baked = __instance.cardBakedGraphic.card_Ammo;
-                Helpers.Method(typeof(UICardBakedGraphic), "SetActiveRenderer").Invoke(__instance.cardBakedGraphic, [baked]);
+                __instance.cardBakedGraphic.SetCard(card.data);
+                //Helpers.Method(typeof(UICardBakedGraphic), "SetActiveRenderer").Invoke(__instance.cardBakedGraphic, [baked]);
                 __instance.cardBakedGraphic.transform.localPosition = new(0, 0, -0.001f); // prevent zfighting
             }
         }
