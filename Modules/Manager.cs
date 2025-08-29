@@ -33,8 +33,14 @@ namespace TexturedDeck
             src = Settings.Add(TexturedDeck.h, "", "srcVerify", "SRC Verifiable", "If enabled, disables setting the BG and the mask for the card.", true);
             src.SetupForModule(Activate, (_, _) => !Directory.Exists(PackPath));
 
-
             //CrystalRenderer.SetupS(); // make sure these are after pack
+        }
+
+        static string CheckVerifiable()
+        {
+            if (!src.Value)
+                return "SRC Verifiable setting is disabled.";
+            return null;
         }
 
         static string PackPath => Path.Combine(MelonEnvironment.ModsDirectory, TexturedDeck.h, category.Value);
